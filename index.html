@@ -110,7 +110,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .mstrip #mPlay[aria-pressed="true"]{background:var(--cobalt);color:var(--ivory)}
 .mstrip .octv{font-family:var(--mono);font-size:11.5px;color:var(--ink);min-width:28px;text-align:center}
 .mstrip .sp{flex:1}
-.playarea{display:flex;gap:8px;background:var(--well);border-radius:10px;padding:8px;min-width:0}
+.playarea{touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none;display:flex;gap:8px;background:var(--well);border-radius:10px;padding:8px;min-width:0}
 .strips{display:flex;gap:6px}
 .strip{width:34px;border-radius:6px;background:var(--well2);position:relative;touch-action:none;cursor:ns-resize;overflow:hidden;box-shadow:inset 0 0 0 1px #2b3540}
 .strip i{position:absolute;left:3px;right:3px;height:4px;border-radius:2px;background:var(--lcd);top:calc((1 - var(--v,0.5)) * (100% - 4px));box-shadow:0 0 8px var(--lcd)}
@@ -134,9 +134,11 @@ button{font:inherit;color:inherit;cursor:pointer}
 @media (max-width:700px){
   .dock{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--enamel);box-shadow:0 -6px 18px rgba(22,32,42,.28);
     padding:8px max(10px,env(safe-area-inset-right,0px)) calc(8px + env(safe-area-inset-bottom,0px)) max(10px,env(safe-area-inset-left,0px))}
-  body{padding-bottom:calc(250px + env(safe-area-inset-bottom,0px))}
-  .kb{height:128px}
-  .strip{width:28px}
+  body{padding-bottom:calc(275px + env(safe-area-inset-bottom,0px))}
+  .kb{height:150px}
+  .strip{width:22px}
+  .strip span{font-size:8.5px}
+  .playarea{padding:6px;gap:6px}
   .help{display:none}
 }
 
@@ -155,6 +157,8 @@ button{font:inherit;color:inherit;cursor:pointer}
 @keyframes blink{50%{opacity:.25}}
 #roll{width:100%;height:110px;display:block;background:var(--well);border-radius:8px}
 #seqInfo{font-family:var(--mono);font-size:11px;color:var(--ink-dim)}
+.warn{background:var(--signal);color:#1a0c08;border-radius:8px;padding:10px 14px;font-size:13.5px}
+.tapstart{border:0;border-radius:10px;background:var(--ink);color:var(--lcd);font-family:var(--display);font-weight:700;letter-spacing:.08em;font-size:16px;padding:18px;touch-action:manipulation}
 @media (max-width:860px){
   .head{grid-template-columns:1fr}
 }
@@ -196,6 +200,8 @@ button{font:inherit;color:inherit;cursor:pointer}
     </div>
   </header>
 
+  <div class="warn" id="audioWarn" hidden>Audio bloccato dal telefono: tocca <b>ACCENDI</b> o un tasto. Su iPhone, se ancora non senti nulla, alza il volume e togli il silenzioso.</div>
+  <button class="tapstart" id="tapStart" hidden>Tocca qui per accendere Ventaglio</button>
   <section class="grid" id="modules"></section>
 
   <section class="rhythm" id="rhythm">
@@ -248,7 +254,7 @@ button{font:inherit;color:inherit;cursor:pointer}
       <span><kbd>esc</kbd> silenzia tutto</span>
       <span><kbd>B</kbd> rec, <kbd>invio</kbd> play/stop, <kbd>⌫</kbd> annulla ripresa</span>
     </div>
-    <p class="note">Tastiera a sfioramento: tocca più in basso sul tasto per suonare più forte, poi scorri il dito verso l'alto per aprire il filtro di quella nota (aftertouch). Funziona in multitouch. Striscia PITCH: piega l'intonazione di ±2 semitoni e torna al centro. Striscia MOD: apre il filtro e resta dove la lasci.
+    <p class="note">Tastiera a sfioramento: tocca più in basso sul tasto per suonare più forte, poi scorri il dito verso l'alto per aprire il filtro di quella nota (aftertouch). Funziona in multitouch; al tocco ogni dito resta sulla sua nota (il glissato strisciando è solo col mouse). Striscia PITCH: piega l'intonazione di ±2 semitoni e torna al centro. Striscia MOD: apre il filtro e resta dove la lasci.
     Trascina le manopole in verticale (con Maiusc per la regolazione fine), doppio clic per tornare al valore iniziale. Le barre FILTRO si disegnano trascinando.</p>
   </section>
 </div>
@@ -924,7 +930,7 @@ function buildKb(){
   KB.innerHTML="";Object.keys(keyEls).forEach(k=>delete keyEls[k]);
   const all=[0,2,4,5,7,9,11,12,14,16,17],blackAfter={0:1,2:3,5:6,7:8,9:10,12:13,14:15};
   const whites=KB.clientWidth&&KB.clientWidth<420?all.slice(0,8):all;kbCount=whites.length;
-  const wW=100/whites.length,bw=wW*.62;
+  const wW=100/whites.length,bw=wW*(coarse?.72:.62);
   whites.forEach((off,wi)=>{const n=baseNote()+off;const k=document.createElement("div");k.className="wk";k.dataset.n=n;
     k.innerHTML=`<em>${off%12==0?noteName(n):""}</em><span>${coarse?NN[n%12]:LABELS[off]}</span>`;KB.appendChild(k);keyEls[n]=k;
     if(blackAfter[off]!=null&&wi<whites.length-1){const bo=blackAfter[off],bn=baseNote()+bo;const b=document.createElement("div");b.className="bk";b.dataset.n=bn;
@@ -937,12 +943,15 @@ function keyAt(x,y){const el=document.elementFromPoint(x,y);return el&&el.closes
 function setAT(info,v){v=Math.max(0,Math.min(1,v));info.el.style.setProperty("--at",v);
   if(!AC)return;const t=AC.currentTime;voices.forEach(x=>{if(x.srcNote===info.n&&!x.released)x.at.offset.setTargetAtTime(v*3000,t,.03)})}
 function keyDown(e,k){const r=k.getBoundingClientRect();const n=+k.dataset.n;
-  const vel=Math.max(.2,Math.min(1,.3+.75*(e.clientY-r.top)/r.height));
+  const rel=Math.max(0,Math.min(1,(e.clientY-r.top)/r.height));
+  const vel=e.pointerType==="touch"?.72+.28*rel:Math.max(.2,Math.min(1,.3+.75*rel));
   const info={n,y0:e.clientY,h:r.height,el:k};ptrNotes.set(e.pointerId,info);noteOn(n,vel)}
 KB.addEventListener("pointerdown",e=>{const k=e.target.closest("[data-n]");if(!k)return;e.preventDefault();KB.setPointerCapture(e.pointerId);keyDown(e,k)});
-KB.addEventListener("pointermove",e=>{const info=ptrNotes.get(e.pointerId);if(!info)return;const k=keyAt(e.clientX,e.clientY);
+KB.addEventListener("pointermove",e=>{const info=ptrNotes.get(e.pointerId);if(!info)return;
+  // al tocco il dito resta sulla sua nota: lo scorrimento serve solo per l'aftertouch, niente glissato involontario
+  const k=e.pointerType==="touch"?null:keyAt(e.clientX,e.clientY);
   if(k&&+k.dataset.n!==info.n){info.el.style.setProperty("--at",0);noteOff(info.n);keyDown(e,k);return}
-  const slide=(info.y0-e.clientY)/(info.h*.6);const pr=e.pointerType==="pen"||(e.pressure>0&&e.pressure!==.5&&e.pointerType==="touch")?e.pressure:0;
+  const slide=(info.y0-e.clientY-(e.pointerType==="touch"?12:0))/(info.h*.6);const pr=e.pointerType==="pen"||(e.pressure>0&&e.pressure!==.5&&e.pointerType==="touch")?e.pressure:0;
   setAT(info,Math.max(slide,pr))});
 const ptrEnd=e=>{const info=ptrNotes.get(e.pointerId);if(info){info.el.style.setProperty("--at",0);noteOff(info.n);ptrNotes.delete(e.pointerId)}};
 KB.addEventListener("pointerup",ptrEnd);KB.addEventListener("pointercancel",ptrEnd);
@@ -975,7 +984,26 @@ stripCtl("stripMod",v=>{modVal=v;if(AC)G.modw.offset.setTargetAtTime(v*4800,AC.c
   q("mMin").onclick=e=>{const d=q("dock");const m=d.classList.toggle("min");e.currentTarget.textContent=m?"▴ Tastiera":"▾ Tastiera";
     document.body.style.paddingBottom=m&&innerWidth<=700?"calc(70px + env(safe-area-inset-bottom,0px))":""};
 }
-document.addEventListener("touchend",()=>{if(AC&&AC.state!=="running")AC.resume()},{passive:true});
+/* sblocco audio su mobile (iOS: tasto silenzioso e gesto utente) */
+const pw=document.getElementById("power");
+let silentEl=null;
+function silentWavURL(){const sr=8000,n=sr/2,buf=new ArrayBuffer(44+n*2),v=new DataView(buf);const w=(o,str)=>{for(let i=0;i<str.length;i++)v.setUint8(o+i,str.charCodeAt(i))};
+  w(0,"RIFF");v.setUint32(4,36+n*2,true);w(8,"WAVE");w(12,"fmt ");v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,"data");v.setUint32(40,n*2,true);
+  return URL.createObjectURL(new Blob([buf],{type:"audio/wav"}))}
+function unlockAudio(){
+  try{if(navigator.audioSession&&navigator.audioSession.type!=="playback")navigator.audioSession.type="playback"}catch(e){}
+  try{if(!silentEl){silentEl=new Audio(silentWavURL());silentEl.loop=true;silentEl.setAttribute("playsinline","");silentEl.volume=.01}
+    const pr=silentEl.play();pr&&pr.catch(()=>{})}catch(e){}
+  initAudio();
+  if(AC){if(AC.state!=="running")AC.resume().then(audioStatus,audioStatus);
+    try{const b=AC.createBuffer(1,1,22050),src=AC.createBufferSource();src.buffer=b;src.connect(AC.destination);src.start(0)}catch(e){}}
+  setTimeout(audioStatus,400);
+}
+function audioStatus(){const el=document.getElementById("audioWarn");if(!el)return;const ok=AC&&AC.state==="running";el.hidden=ok;
+  if(ok){pw.textContent="ACCESO";pw.classList.add("on")}}
+["touchend","click","keydown"].forEach(ev=>document.addEventListener(ev,unlockAudio,{capture:true,passive:true}));
+document.addEventListener("pointerdown",()=>{if(!AC||AC.state!=="running")unlockAudio()},{capture:true,passive:true});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&AC&&AC.state!=="running")AC.resume().then(audioStatus,audioStatus)});
 renderStrip();
 
 /* ---------- MIDI ---------- */
@@ -1021,8 +1049,9 @@ function draw(){
 (function idleScope(){const w=scope.width,h=scope.height;sc.strokeStyle="#4f7f72";sc.lineWidth=2;sc.beginPath();sc.moveTo(0,h/2);sc.lineTo(w,h/2);sc.stroke()})();
 
 /* ---------- accensione ---------- */
-const pw=document.getElementById("power");
-pw.onclick=()=>{initAudio();pw.textContent="ACCESO";pw.classList.add("on")};
+pw.onclick=()=>{unlockAudio()};
+{const ts=document.getElementById("tapStart");if(matchMedia("(pointer:coarse)").matches){ts.hidden=false;ts.onclick=()=>{unlockAudio();ts.hidden=true}}
+ setInterval(()=>{if(AC&&AC.state==="running")ts.hidden=true;else if(AC){document.getElementById("audioWarn").hidden=false}},1500)}
 // ripristina l'ultimo stato
 if(saved&&saved.last){S=Object.assign(defaults(),saved.last);presetIdx=Math.min(saved.preset||0,PRESETS.length-1);refreshUI();document.getElementById("presetName").textContent=PRESETS[presetIdx].name}
 else loadPreset(0);
